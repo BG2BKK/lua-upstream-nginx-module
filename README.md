@@ -216,6 +216,7 @@ add_server
  Add a server to upstream. if the server is exist will return err and notes the server is exist.     
  Warning:         
  `it also to add server to ngx_http_upstream_server_t structure ,so you should call add_peer.   
+
 [Back to TOC](#table-of-contents)
 
 add_peer
@@ -225,10 +226,10 @@ add_peer
  Add a server to back-end peers. if back-end peers is exist will return err and notes the peer is exist. 
  it's suitable for ip_hash or round_robin and consistent_hash.    
  Warning:      
- `if you are using a consistent_hash and you should change nginx directory auto/modules to below`     
+ `if you are using load balance algorithm: consistent_hash or least_conn, you should update something to below`     
 
  ```nginx
- Modified macro variable 'NGX_HTTP_UPSTREAM_CONSISTENT_HASH' 1 ,it's default 0 at 'lua-upstream-nginx-module/src/ngx_http_lua_upstream_module.h' file.
+ Modified macro variable 'NGX_HTTP_UPSTREAM_CONSISTENT_HASH' 1 or 'NGX_HTTP_UPSTREAM_LEAST_CONN' 1 ,it's default 0 at 'lua-upstream-nginx-module/src/ngx_http_lua_upstream_module.h' file.
  ```
 
 [Back to TOC](#table-of-contents)       
@@ -239,7 +240,7 @@ remove_server
 
  Remove a server from upstream. if the server is not exist will return err and notes the server is not found.     
  Warning:         
- `it also to add server to ngx_http_upstream_server_t structure ,so you should call add_peer.   
+ `it also to add server to ngx_http_upstream_server_t structure, so you should call add_peer.   
 
 
 [Back to TOC](#table-of-contents)       
@@ -251,12 +252,11 @@ remove_peer
  Remove a server to back-end peers. if back-end peers not exist will return err and notes the peer is not found. 
  it's suitable for ip_hash or round_robin and consistent_hash.    
  Warning:      
- `if you are using a consistent_hash and you should change nginx directory auto/modules to below`     
+ `if you are using load balance algorithm: consistent_hash or least_conn, you should update something to below`     
 
  ```nginx
- Modified macro variable 'NGX_HTTP_UPSTREAM_CONSISTENT_HASH' 1 ,it's default 0 at 'lua-upstream-nginx-module/src/ngx_http_lua_upstream_module.h' file.
+ Modified macro variable 'NGX_HTTP_UPSTREAM_CONSISTENT_HASH' 1 or 'NGX_HTTP_UPSTREAM_LEAST_CONN' 1 ,it's default 0 at 'lua-upstream-nginx-module/src/ngx_http_lua_upstream_module.h' file.
  ```
-
 
 [Back to TOC](#table-of-contents)       
 
@@ -273,13 +273,9 @@ TODO
 Compatibility
 =============
 
-The following versions of Nginx should work with this module:
+The following versions of Tengine should work with this module:
 
-* **1.9.x**  (last tested: 1.9.2)
-* **1.8.x**
-* **1.7.x**  (last tested: 1.7.10)
-* **1.6.x**
-* **1.5.x**  (last tested: 1.5.12)
+* **2.1.0**  (last tested: 2.1.0)
 
 [Back to TOC](#table-of-contents)
 

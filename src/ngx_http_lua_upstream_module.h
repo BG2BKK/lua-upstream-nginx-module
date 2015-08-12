@@ -3,54 +3,20 @@
 
 // the NGX_HTTP_UPSTREAM_CONSISTENT_HASH define is support consistent_hash 
 #define NGX_HTTP_UPSTREAM_CONSISTENT_HASH 0
-
-static ngx_int_t ngx_http_lua_upstream_init(ngx_conf_t *cf);
-static int ngx_http_lua_upstream_create_module(lua_State * L);
-static int ngx_http_lua_upstream_get_upstreams(lua_State * L);
-static int ngx_http_lua_upstream_get_servers(lua_State * L);
-static ngx_http_upstream_main_conf_t *
-ngx_http_lua_upstream_get_upstream_main_conf(lua_State *L);
-static int ngx_http_lua_upstream_get_primary_peers(lua_State * L);
-static int ngx_http_lua_upstream_get_backup_peers(lua_State * L);
-static int ngx_http_lua_get_peer(lua_State *L,
-                                 ngx_http_upstream_rr_peer_t *peer, ngx_uint_t id);
-static ngx_http_upstream_srv_conf_t *
-ngx_http_lua_upstream_find_upstream(lua_State *L, ngx_str_t *host);
-static ngx_http_upstream_rr_peer_t *
-ngx_http_lua_upstream_lookup_peer(lua_State *L);
-static int ngx_http_lua_upstream_set_peer_down(lua_State * L);
-static int
-ngx_http_lua_upstream_add_server(lua_State * L);
-static int
-ngx_http_lua_upstream_simple_add_peer(lua_State * L);
-static ngx_http_upstream_server_t*
-ngx_http_lua_upstream_compare_server(ngx_http_upstream_srv_conf_t * us , ngx_url_t u);
-static ngx_http_upstream_srv_conf_t *
-ngx_http_lua_upstream_check_peers(lua_State * L,ngx_url_t u,ngx_http_upstream_server_t ** srv);
-static int
-ngx_http_lua_upstream_exist_peer(ngx_http_upstream_rr_peers_t * peers , ngx_url_t u);
-
-static int
-ngx_http_lua_upstream_add_peer(lua_State * L);
-
-static int
-ngx_http_lua_upstream_remove_server(lua_State * L);
-
-static int
-ngx_http_lua_upstream_simple_remove_peer(lua_State * L);
-static int
-ngx_http_lua_upstream_remove_peer(lua_State * L);
-
-#if (NGX_HTTP_UPSTREAM_CHECK)
-ngx_uint_t 
-ngx_http_lua_upstream_add_check_peer(ngx_http_upstream_srv_conf_t *us , ngx_addr_t *peer_addr);
+// the NGX_HTTP_UPSTREAM_LEAST_CONN define is support least_conn 
+#define NGX_HTTP_UPSTREAM_LEAST_CONN      0
 
 
-//Mark the follow function from ngx_http_check_module.c file,
-//i'll submit a patch to delete static of ngx_http_upstream_check_addr_change_port for check_module 
-static ngx_int_t
-ngx_http_upstream_check_addr_change_port(ngx_pool_t *pool, ngx_addr_t *dst,
-                                                             ngx_addr_t *src, ngx_uint_t port);
+#if (NGX_HTTP_UPSTREAM_LEAST_CONN)
+
+//Mark the variable from ngx_http_upstream_least_conn_module.c file 
+extern ngx_module_t ngx_http_upstream_least_conn_module;
+
+//Mark the struct from ngx_http_upstream_least_conn_module.c file 
+typedef struct {
+    ngx_uint_t                        *conns;
+} ngx_http_upstream_least_conn_conf_t;
+
 #endif
 
 
@@ -62,16 +28,21 @@ ngx_http_upstream_check_addr_change_port(ngx_pool_t *pool, ngx_addr_t *dst,
 //Mark the variable from ngx_http_upstream_check_module.c file 
 extern ngx_module_t ngx_http_upstream_check_module;
 
-typedef struct ngx_http_upstream_check_peer_s ngx_http_upstream_check_peer_t;
-typedef struct ngx_http_upstream_check_srv_conf_s
-    ngx_http_upstream_check_srv_conf_t;
+ngx_uint_t 
+ngx_http_lua_upstream_add_check_peer(ngx_http_upstream_srv_conf_t *us , ngx_addr_t *peer_addr);
 
-typedef ngx_int_t (*ngx_http_upstream_check_packet_init_pt)
-    (ngx_http_upstream_check_peer_t *peer);
-typedef ngx_int_t (*ngx_http_upstream_check_packet_parse_pt)
-    (ngx_http_upstream_check_peer_t *peer);
-typedef void (*ngx_http_upstream_check_packet_clean_pt)
-    (ngx_http_upstream_check_peer_t *peer);
+//Mark the follow function from ngx_http_check_module.c file,
+//i'll submit a patch to delete static of ngx_http_upstream_check_addr_change_port for check_module 
+static ngx_int_t
+ngx_http_upstream_check_addr_change_port(ngx_pool_t *pool, ngx_addr_t *dst, ngx_addr_t *src, ngx_uint_t port);
+typedef struct ngx_http_upstream_check_peer_s ngx_http_upstream_check_peer_t;
+
+
+typedef struct ngx_http_upstream_check_srv_conf_s ngx_http_upstream_check_srv_conf_t;
+
+typedef ngx_int_t (*ngx_http_upstream_check_packet_init_pt) (ngx_http_upstream_check_peer_t *peer);
+typedef ngx_int_t (*ngx_http_upstream_check_packet_parse_pt) (ngx_http_upstream_check_peer_t *peer);
+typedef void (*ngx_http_upstream_check_packet_clean_pt) (ngx_http_upstream_check_peer_t *peer);
 
 
 typedef struct {
@@ -132,6 +103,7 @@ struct ngx_http_upstream_check_peer_s {
     ngx_http_upstream_check_srv_conf_t      *conf;
 };
 
+
 typedef struct {
     ngx_str_t                                check_shm_name;
     ngx_uint_t                               checksum;
@@ -139,6 +111,7 @@ typedef struct {
 
     ngx_http_upstream_check_peers_shm_t     *peers_shm;
 } ngx_http_upstream_check_peers_t;
+
 
 typedef struct {
     ngx_uint_t                               type;
@@ -162,7 +135,6 @@ typedef struct {
 } ngx_check_conf_t;
 
 
-
 struct ngx_http_upstream_check_srv_conf_s {
     ngx_uint_t                               port;
     ngx_uint_t                               fall_count;
@@ -184,11 +156,11 @@ struct ngx_http_upstream_check_srv_conf_s {
     ngx_uint_t                               default_down;
 };
 
+
 typedef struct {
     ngx_uint_t                               check_shm_size;
     ngx_http_upstream_check_peers_t         *peers;
 } ngx_http_upstream_check_main_conf_t;
-
 
 #endif
 
@@ -197,10 +169,9 @@ typedef struct {
 
 # if (NGX_HTTP_UPSTREAM_CONSISTENT_HASH)
 
-#define NGX_CHASH_VIRTUAL_NODE_NUMBER 160
-
 //Mark the variable from ngx_http_upstream_consistent_hash_module.c file 
 extern ngx_module_t ngx_http_upstream_consistent_hash_module;
+#define NGX_CHASH_VIRTUAL_NODE_NUMBER 160
 
 static ngx_int_t
 ngx_http_upstream_chash_cmp(const void *one, const void *two);
@@ -232,6 +203,7 @@ typedef struct {
     ngx_http_upstream_chash_server_t       *servers;
     ngx_http_upstream_chash_down_server_t  *d_servers;
 } ngx_http_upstream_chash_srv_conf_t;
+
 
 typedef struct {
     uint32_t                                hash;
