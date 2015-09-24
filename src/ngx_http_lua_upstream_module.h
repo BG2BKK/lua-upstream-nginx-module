@@ -28,13 +28,6 @@ typedef struct {
 //Mark the variable from ngx_http_upstream_check_module.c file 
 extern ngx_module_t ngx_http_upstream_check_module;
 
-ngx_uint_t 
-ngx_http_lua_upstream_add_check_peer(ngx_http_upstream_srv_conf_t *us , ngx_addr_t *peer_addr);
-
-//Mark the follow function from ngx_http_check_module.c file,
-//i'll submit a patch to delete static of ngx_http_upstream_check_addr_change_port for check_module 
-static ngx_int_t
-ngx_http_upstream_check_addr_change_port(ngx_pool_t *pool, ngx_addr_t *dst, ngx_addr_t *src, ngx_uint_t port);
 typedef struct ngx_http_upstream_check_peer_s ngx_http_upstream_check_peer_t;
 
 
@@ -172,9 +165,6 @@ typedef struct {
 //Mark the variable from ngx_http_upstream_consistent_hash_module.c file 
 extern ngx_module_t ngx_http_upstream_consistent_hash_module;
 #define NGX_CHASH_VIRTUAL_NODE_NUMBER 160
-
-static ngx_int_t
-ngx_http_upstream_chash_cmp(const void *one, const void *two);
 
 
 typedef struct {
