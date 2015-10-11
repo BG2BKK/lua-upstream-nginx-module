@@ -17,6 +17,8 @@
 #include "ngx_http_lua_upstream_module.h"
 
 
+#define NGX_DELAY_DELETE 100 * 1000
+
 ngx_module_t ngx_http_lua_upstream_module;
 
 
@@ -45,6 +47,10 @@ static int
 static int ngx_http_lua_upstream_add_peer(lua_State * L); 
 static int ngx_http_lua_upstream_remove_server(lua_State * L); 
 static int ngx_http_lua_upstream_remove_peer(lua_State * L);
+static void ngx_http_lua_upstream_event_init(void *peers);
+static void ngx_http_lua_upstream_add_delay_delete(ngx_event_t *event);
+static ngx_int_t ngx_pfree_and_delay(ngx_pool_t *pool, void *p);    
+static void * ngx_prealloc_and_delay(ngx_pool_t *pool, void *p, size_t old_size, size_t new_size); 
 
 #if(NGX_HTTP_UPSTREAM_CHECK)
 static ngx_uint_t 
@@ -104,6 +110,106 @@ ngx_module_t ngx_http_lua_upstream_module = {
     NULL,                        /* exit master */
     NGX_MODULE_V1_PADDING
 };
+
+
+typedef struct {
+    ngx_event_t                              delay_delete_ev;
+
+    time_t                                   start_sec;
+    ngx_msec_t                               start_msec;
+
+    void                                    *data;
+} ngx_delay_event_t;
+
+
+static void
+ngx_http_lua_upstream_event_init(void *peers)
+{
+    ngx_time_t                                  *tp;
+    ngx_delay_event_t                           *delay_event;
+
+
+    delay_event = ngx_calloc(sizeof(*delay_event), ngx_cycle->log);
+    if (delay_event == NULL) {
+        ngx_log_error(NGX_LOG_ERR, ngx_cycle->log, 0,
+                "http_lua_upstream_event_init: calloc failed");
+        return;
+    }
+
+    tp = ngx_timeofday();
+    delay_event->start_sec = tp->sec;
+    delay_event->start_msec = tp->msec;
+
+    delay_event->delay_delete_ev.handler = ngx_http_lua_upstream_add_delay_delete;
+    delay_event->delay_delete_ev.log = ngx_cycle->log;
+    delay_event->delay_delete_ev.data = delay_event;
+    delay_event->delay_delete_ev.timer_set = 0;
+
+
+    delay_event->data = peers;
+    ngx_add_timer(&delay_event->delay_delete_ev, NGX_DELAY_DELETE);
+
+    return;
+}
+
+
+static void
+ngx_http_lua_upstream_add_delay_delete(ngx_event_t *event)
+{
+    ngx_uint_t                     i;
+    ngx_connection_t              *c;
+    ngx_delay_event_t             *delay_event;
+    ngx_http_request_t            *r=NULL;
+    ngx_http_log_ctx_t            *ctx=NULL;
+    void                          *peers=NULL;
+
+    delay_event = event->data;
+
+    c = ngx_cycle->connections;
+    for (i = 0; i < ngx_cycle->connection_n; i++) {
+
+        if (c[i].fd == (ngx_socket_t) - 1) {
+            continue;
+        } else {
+
+            if (c[i].log->data != NULL) {
+                ctx = c[i].log->data;
+                r = ctx->current_request;
+            }
+        }
+
+        if (r) {
+            if (r->start_sec < delay_event->start_sec) {
+                ngx_add_timer(&delay_event->delay_delete_ev, NGX_DELAY_DELETE);
+                return;
+            }
+
+            if (r->start_sec == delay_event->start_sec) {
+
+                if (r->start_msec <= delay_event->start_msec) {
+                    ngx_add_timer(&delay_event->delay_delete_ev, NGX_DELAY_DELETE);
+                    return;
+                }
+            }
+        }
+    }
+
+    peers = delay_event->data;
+
+    if (peers != NULL) {
+
+        ngx_free(peers);
+        peers = NULL;
+    }
+
+
+    ngx_free(delay_event);
+
+    delay_event = NULL;
+
+    return;
+}
+
 
 
 static ngx_int_t
@@ -243,10 +349,9 @@ ngx_http_lua_upstream_add_server(lua_State * L)
         lua_pushliteral(L, "upstream not found\n");
         return 2;
     }
- 
      
     // lua virtual machine memory is stack,so dup a memory 
-    u.url.data = ngx_pcalloc(uscf->servers->pool, u.url.len+1);
+    u.url.data = ngx_pcalloc(uscf->servers->pool, u.url.len + 1);
     ngx_memcpy(u.url.data, p, u.url.len);
 
     if (ngx_http_lua_upstream_compare_server(uscf, u) != NULL) {
@@ -686,10 +791,10 @@ ngx_http_lua_upstream_remove_peer(lua_State * L)
 #endif
 
              for (j = i; j < peers->number - 1; j++) {
-                peers->peer[j] = peers->peer[j+1];
+                peers->peer[j] = peers->peer[j + 1];
              }
 
-             n = peers->number -1;
+             n = peers->number - 1;
              n += peers->next != NULL ? peers->next->number : 0; 
              old_size = n * sizeof(ngx_http_upstream_rr_peer_t) 
                           + sizeof(ngx_http_upstream_rr_peers_t) * (peers->next != NULL ? 2 : 1);
@@ -784,6 +889,75 @@ ngx_http_lua_upstream_exist_peer(ngx_http_upstream_rr_peers_t * peers, ngx_url_t
     }
     
     return 0;
+}
+
+
+static ngx_int_t
+ngx_pfree_and_delay(ngx_pool_t *pool, void *p)
+{
+    ngx_pool_large_t  *l;
+
+    for (l = pool->large; l; l = l->next) {
+        if (p == l->alloc) {
+            ngx_log_debug1(NGX_LOG_DEBUG_ALLOC, pool->log, 0,
+                           "delay free: %p", l->alloc);
+
+            ngx_http_lua_upstream_event_init(l->alloc);
+
+            return NGX_OK;
+        }
+    }
+
+    return NGX_DECLINED;
+}
+
+
+static void *
+ngx_prealloc_and_delay(ngx_pool_t *pool, void *p, size_t old_size, size_t new_size)
+{
+    void                *new;
+    ngx_pool_t          *node;
+
+    if (p == NULL) {
+        return ngx_palloc(pool, new_size);
+    }
+
+    if (new_size == 0) {
+        if ((u_char *) p + old_size == pool->d.last) {
+           pool->d.last = p;
+
+        } else {
+           ngx_pfree(pool, p);
+        }
+
+        return NULL;
+    }
+
+    if (old_size <= pool->max) {
+        for (node = pool; node; node = node->d.next) {
+            if ((u_char *)p + old_size == node->d.last
+                && (u_char *)p + new_size <= node->d.end) {
+                node->d.last = (u_char *)p + new_size;
+                return p;
+            }
+        }
+    }
+
+    if (new_size <= old_size) {
+       return p;
+    }
+
+
+    new = ngx_palloc(pool, new_size);
+    if (new == NULL) {
+        return NULL;
+    }
+
+    ngx_memcpy(new, p, old_size);
+
+    ngx_pfree_and_delay(pool, p);
+
+    return new;
 }
 
 
@@ -1258,7 +1432,7 @@ ngx_http_lua_upstream_add_peer(lua_State * L)
 			+ sizeof(ngx_http_upstream_rr_peers_t) * (peers->next != NULL ? 2 : 1);
         new_size = sizeof(ngx_http_upstream_rr_peer_t) + old_size;
     
-        peers = ngx_prealloc(ngx_cycle->pool, uscf->peer.data, old_size, new_size);
+        peers = ngx_prealloc_and_delay(ngx_cycle->pool, uscf->peer.data, old_size, new_size);
         if (peers == NULL) {
             lua_pushnil(L);
             lua_pushliteral(L, "peers pcalloc fail\n");
@@ -1302,7 +1476,7 @@ ngx_http_lua_upstream_add_peer(lua_State * L)
 			       + sizeof(ngx_http_upstream_rr_peers_t);
         new_size = sizeof(ngx_http_upstream_rr_peer_t) + old_size;
     
-        backup  = ngx_prealloc(ngx_cycle->pool, peers->next, old_size, new_size );
+        backup  = ngx_prealloc_and_delay(ngx_cycle->pool, peers->next, old_size, new_size );
         if (backup == NULL) {
             lua_pushnil(L);
             lua_pushliteral(L, "backup pcalloc fail\n");
