@@ -15,6 +15,7 @@ Table of Contents
     * [get_primary_peers](#get_primary_peers)
     * [get_backup_peers](#get_backup_peers)
     * [set_peer_down](#set_peer_down)
+    * [set_peer_weight](#set_peer_weight)
     * [add_server](#add_server)
     * [add_peer](#add_peer)
     * [remove_server](#remove_server)
@@ -209,6 +210,46 @@ You can turn on a peer again by providing a `false` value as the 4th argument.
 
 [Back to TOC](#table-of-contents)
 
+set_peer_weight
+-------------
+`syntax: ok, err = upstream.set_peer_weight(upstream_name, is_backup, peer_id, weight_value)`
+
+Set the "weight" (ngx_uint_t) attribute of the specified peer.
+
+To uniquely specify a peer, you need to specify the upstream name, whether or not it is a backup peer, and the peer id (starting from 0).
+
+Note that this method only changes the peer settings in the current Nginx worker
+process. You need to synchronize the changes across all the Nginx workers yourself if you
+want a server-wide change (for example, by means of [ngx_lua](https://github.com/openresty/lua-nginx-module#ngxshareddict)'s [ngx.shared.DICT](https://github.com/openresty/lua-nginx-module#ngxshareddict)).
+
+Below is an example. Consider we have a "bar" upstream block in `nginx.conf`:
+
+```nginx
+upstream bar {
+    server 127.0.0.2 weight=2;
+    server 127.0.0.3 weight=3 backup;
+    server 127.0.0.4 fail_timeout=23 weight=7 max_fails=200 backup;
+}
+```
+
+then
+
+```lua
+upstream.set_peer_weight("bar", false, 0, 3)
+```
+
+will set the primary peer weight = 3 corresponding to `server 127.0.0.2`.
+
+Similarly,
+
+```lua
+upstream.set_peer_weight("bar", true, 1, 2)
+```
+
+will set the backup peer weight = 2 corresponding to `server 127.0.0.4 ...`.
+
+[Back to TOC](#table-of-contents)
+
 add_server
 -----------
 `syntax: ok,err = upstream.add_server(upstream_name,ip:port,weight,max_fails,fail_timeout)`
@@ -216,7 +257,7 @@ add_server
 Add a server to upstream. if the server is exist will return err and notes the server is exist.     
 Note that this method only add a server in the current Nginx worker process.
 You need to synchronize the changes across all the Nginx workers if you want a server-wide change.
-Please useing [ngx_lua_upstream_dyusc]()
+Please useing [ngx_lua_upstream_dyusc](https://gitlab.weibo.cn/fakang/ngx_lua_upstream_dyupsc)
 
  Warning:         
  `it also to add server to ngx_http_upstream_server_t structure ,so you should call add_peer.   
@@ -226,9 +267,10 @@ Please useing [ngx_lua_upstream_dyusc]()
 add_peer
 -----------
 `syntax: ok,err = upstream.add_peer(upstream,ip:port)`
+
 Note that this method only add a peer in the current Nginx worker process.
 You need to synchronize the changes across all the Nginx workers if you want a server-wide change.
-Please useing [ngx_lua_upstream_dyusc]()
+Please useing [ngx_lua_upstream_dyusc](https://gitlab.weibo.cn/fakang/ngx_lua_upstream_dyupsc)
 Add a server to back-end peers. if back-end peers is exist will return err and notes the peer is exist. 
 it's suitable for ip_hash or round_robin and consistent_hash.    
 
@@ -248,7 +290,7 @@ remove_server
 Remove a server from upstream. if the server is not exist will return err and notes the server is not found.     
 Note that this method only remove a server in the current Nginx worker process.
 You need to synchronize the changes across all the Nginx workers if you want a server-wide change.
-Please useing [ngx_lua_upstream_dyusc]()
+Please useing [ngx_lua_upstream_dyusc](https://gitlab.weibo.cn/fakang/ngx_lua_upstream_dyupsc)
 
  Warning:         
  `it also to add server to ngx_http_upstream_server_t structure, so you should call add_peer.   
@@ -264,7 +306,7 @@ Remove a server to back-end peers. if back-end peers not exist will return err a
 it's suitable for ip_hash or round_robin and consistent_hash.    
 Note that this method only remove a peer in the current Nginx worker process.
 You need to synchronize the changes across all the Nginx workers if you want a server-wide change.
-Please useing [ngx_lua_upstream_dyusc]()
+Please useing [ngx_lua_upstream_dyusc](https://gitlab.weibo.cn/fakang/ngx_lua_upstream_dyupsc)
 
  Warning:      
  `if you are using load balance algorithm: consistent_hash or least_conn, you should update something to below`     
