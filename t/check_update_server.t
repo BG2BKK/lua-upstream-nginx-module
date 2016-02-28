@@ -52,7 +52,7 @@ __DATA__
             local max_fails = 10
             local fail_timeout = 10
 
-            local str,err = add_server("bar",server_ip..":"..server_port,weight,max_fails,fail_timeout)
+            local str,err = add_server("bar", server_ip..":"..server_port, weight, max_fails, fail_timeout)
             if not str then
                ngx.say("the server is exist :",server_ip..":"..server_port)
             end
@@ -123,7 +123,7 @@ __DATA__
 
             ngx.say("server ", ":", server_ip..":"..server_port)
 
-            local str,err = add_peer(upstream_name,server_ip..":"..server_port)
+            local str,err = add_peer(upstream_name, server_ip..":"..server_port)
             if not str then
                    ngx.say(err)
             end
@@ -153,6 +153,7 @@ not find this peer
 
     upstream bar {
         server 127.0.0.1:81   weight=1;
+        server 127.0.0.1:82   weight=1;
     }
 --- config
     location /remove_server {
@@ -164,7 +165,7 @@ not find this peer
             local server_ip = args["ip"]
             local server_port = args["port"]
 
-            local ser, err = remove_server(upstream_name,server_ip..":"..server_port)
+            local ser, err = remove_server(upstream_name, server_ip..":"..server_port)
             if not ser then
                ngx.say("failed to remove server: ", err)
                return
@@ -189,6 +190,7 @@ not find this peer
 
     upstream bar {
         server 127.0.0.1:81   weight=1;
+        server 127.0.0.1:82   weight=1;
     }
 --- config
     location /remove_peer {
@@ -200,7 +202,7 @@ not find this peer
             local server_ip = args["ip"]
             local server_port = args["port"]
 
-            local ser, err = remove_peer(upstream_name,server_ip..":"..server_port)
+            local ser, err = remove_peer(upstream_name, server_ip..":"..server_port)
             if not ser then
                ngx.say("failed to remove peer: ", err)
                return
