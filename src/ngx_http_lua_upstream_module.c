@@ -37,6 +37,7 @@ static ngx_http_upstream_srv_conf_t *
 static ngx_http_upstream_rr_peer_t *
     ngx_http_lua_upstream_lookup_peer(lua_State *L);
 static int ngx_http_lua_upstream_set_peer_down(lua_State * L);
+static int ngx_http_lua_upstream_set_peer_weight(lua_State * L);
 static int ngx_http_lua_upstream_add_server(lua_State * L); 
 static ngx_http_upstream_server_t*
     ngx_http_lua_upstream_compare_server(ngx_http_upstream_srv_conf_t * us, ngx_url_t u);  
@@ -51,6 +52,7 @@ static void ngx_http_lua_upstream_event_init(void *peers);
 static void ngx_http_lua_upstream_add_delay_delete(ngx_event_t *event);
 static ngx_int_t ngx_pfree_and_delay(ngx_pool_t *pool, void *p);    
 static void * ngx_prealloc_and_delay(ngx_pool_t *pool, void *p, size_t old_size, size_t new_size); 
+static int ngx_http_lua_upstream_get_worker_processes(lua_State *L);
 
 #if(NGX_HTTP_UPSTREAM_CHECK)
 static ngx_uint_t 
@@ -211,7 +213,6 @@ ngx_http_lua_upstream_add_delay_delete(ngx_event_t *event)
 }
 
 
-
 static ngx_int_t
 ngx_http_lua_upstream_init(ngx_conf_t *cf)
 {
@@ -246,6 +247,9 @@ ngx_http_lua_upstream_create_module(lua_State * L)
     lua_pushcfunction(L, ngx_http_lua_upstream_set_peer_down);
     lua_setfield(L, -2, "set_peer_down");
 
+    lua_pushcfunction(L, ngx_http_lua_upstream_set_peer_weight);
+    lua_setfield(L, -2, "set_peer_weight");
+
     lua_pushcfunction(L, ngx_http_lua_upstream_add_server);
     lua_setfield(L, -2, "add_server");
 
@@ -257,6 +261,9 @@ ngx_http_lua_upstream_create_module(lua_State * L)
 
     lua_pushcfunction(L, ngx_http_lua_upstream_remove_peer);
     lua_setfield(L, -2, "remove_peer");
+
+    lua_pushcfunction(L, ngx_http_lua_upstream_get_worker_processes);
+    lua_setfield(L, -2, "get_worker_processes");
 
     return 1;
 }
@@ -297,6 +304,58 @@ ngx_http_lua_upstream_compare_server(ngx_http_upstream_srv_conf_t * us, ngx_url_
 
 }
 
+
+/*
+ * the function is set the specified server weight  
+ * 
+*/
+static int
+ngx_http_lua_upstream_set_peer_weight(lua_State * L)
+{
+    ngx_http_upstream_rr_peer_t          *peer;
+    ngx_str_t                             host;
+    ngx_http_upstream_srv_conf_t         *us;
+    ngx_http_upstream_rr_peers_t         *peers;
+    ngx_uint_t                            diff_weight;
+    ngx_uint_t                            new_weight;
+
+    if (lua_gettop(L) != 4) {
+        return luaL_error(L, "exactly 4 arguments expected");
+    }
+
+    peer = ngx_http_lua_upstream_lookup_peer(L);
+    if (peer == NULL) {
+        return 2;
+    }
+
+    new_weight = (ngx_int_t) luaL_checkint(L, 4);
+    if (new_weight < 1){
+        lua_pushnil(L);
+        lua_pushliteral(L, "must be greater than 0");
+        return 2;
+    }
+		
+
+    diff_weight = new_weight - peer->weight;
+    peer->weight = new_weight;
+    peer->effective_weight = new_weight;
+    peer->current_weight += diff_weight;
+
+    // find upstream, in order to update weighted & total_weight
+    host.data = (u_char *) luaL_checklstring(L, 1, &host.len);
+    us = ngx_http_lua_upstream_find_upstream(L, &host);
+    if (us == NULL) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "upstream not found\n");
+        return 2;
+    }
+
+    peers = us->peer.data;
+    peers->total_weight += diff_weight;
+    peers->weighted = (peers->total_weight == peers->number);
+
+    return 1;
+}
 
 
 /*
@@ -518,7 +577,6 @@ ngx_http_lua_upstream_remove_server(lua_State * L)
 }
 
 
-
 #if (NGX_HTTP_UPSTREAM_LEAST_CONN) 
 static int
 ngx_http_lua_upstream_remover_peer_least_conn(lua_State * L,
@@ -583,7 +641,6 @@ ngx_http_upstream_chash_cmp(const void *one, const void *two)
         return -1;
     }
 }
-
 
 
 static int
@@ -712,7 +769,6 @@ ngx_http_lua_upstream_remove_peer_chash(lua_State * L, ngx_http_upstream_srv_con
 #endif
 
 
-
 /*
  * the function is remove server from back-end peers. if 
  * the server is not find and return error and notes the 
@@ -837,6 +893,18 @@ ngx_http_lua_upstream_remove_peer(lua_State * L)
     }
 
 #endif
+
+    return 1;
+}
+
+
+static int
+ngx_http_lua_upstream_get_worker_processes(lua_State *L)
+{
+    ngx_core_conf_t            *ccf;
+
+    ccf = (ngx_core_conf_t *)ngx_get_conf(ngx_cycle->conf_ctx, ngx_core_module);
+    lua_pushinteger(L, (lua_Integer) ccf->worker_processes);
 
     return 1;
 }
@@ -1823,7 +1891,6 @@ ngx_http_lua_upstream_lookup_peer(lua_State *L)
 }
 
 
-
 static int
 ngx_http_lua_get_peer(lua_State *L, ngx_http_upstream_rr_peer_t *peer,
     ngx_uint_t id)
@@ -1898,6 +1965,7 @@ ngx_http_lua_get_peer(lua_State *L, ngx_http_upstream_rr_peer_t *peer,
 
     return 0;
 }
+
 
 static ngx_http_upstream_main_conf_t *
 ngx_http_lua_upstream_get_upstream_main_conf(lua_State *L)
