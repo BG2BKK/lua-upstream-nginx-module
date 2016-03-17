@@ -38,6 +38,8 @@ static ngx_http_upstream_rr_peer_t *
     ngx_http_lua_upstream_lookup_peer(lua_State *L);
 static int ngx_http_lua_upstream_set_peer_down(lua_State * L);
 static int ngx_http_lua_upstream_set_peer_weight(lua_State * L);
+static int ngx_http_lua_upstream_set_peer_max_fails(lua_State * L);
+static int ngx_http_lua_upstream_set_peer_fail_timeout(lua_State * L);
 static int ngx_http_lua_upstream_add_server(lua_State * L); 
 static ngx_http_upstream_server_t*
     ngx_http_lua_upstream_compare_server(ngx_http_upstream_srv_conf_t * us, ngx_url_t u);  
@@ -240,6 +242,12 @@ ngx_http_lua_upstream_create_module(lua_State * L)
     lua_pushcfunction(L, ngx_http_lua_upstream_set_peer_weight);
     lua_setfield(L, -2, "set_peer_weight");
 
+    lua_pushcfunction(L, ngx_http_lua_upstream_set_peer_max_fails);
+    lua_setfield(L, -2, "set_peer_max_fails");
+
+    lua_pushcfunction(L, ngx_http_lua_upstream_set_peer_fail_timeout);
+    lua_setfield(L, -2, "set_peer_fail_timeout");
+
     lua_pushcfunction(L, ngx_http_lua_upstream_add_server);
     lua_setfield(L, -2, "add_server");
 
@@ -306,8 +314,8 @@ ngx_http_lua_upstream_set_peer_weight(lua_State * L)
     ngx_str_t                             host;
     ngx_http_upstream_srv_conf_t         *us;
     ngx_http_upstream_rr_peers_t         *peers;
-    ngx_uint_t                            diff_weight;
-    ngx_uint_t                            new_weight;
+    ngx_int_t                            diff_weight;
+    ngx_int_t                            new_weight;
 
     if (lua_gettop(L) != 4) {
         return luaL_error(L, "exactly 4 arguments expected");
@@ -349,6 +357,72 @@ ngx_http_lua_upstream_set_peer_weight(lua_State * L)
 
 
 /*
+ * the function is set the specified server max_fails  
+ * 
+*/
+static int
+ngx_http_lua_upstream_set_peer_max_fails(lua_State * L)
+{
+    ngx_http_upstream_rr_peer_t          *peer;
+    ngx_uint_t                            new_max_fails;
+
+    if (lua_gettop(L) != 4) {
+        return luaL_error(L, "exactly 4 arguments expected");
+    }
+
+    peer = ngx_http_lua_upstream_lookup_peer(L);
+    if (peer == NULL) {
+        return 2;
+    }
+
+    new_max_fails = (ngx_uint_t) luaL_checkint(L, 4);
+    if (new_max_fails < 1) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "must be greater than 0");
+        return 2;
+    }
+		
+
+    peer->max_fails = new_max_fails;
+
+    return 1;
+}
+
+
+/*
+ * the function is set the specified server fail_timeout  
+ * 
+*/
+static int
+ngx_http_lua_upstream_set_peer_fail_timeout(lua_State * L)
+{
+    ngx_http_upstream_rr_peer_t          *peer;
+    time_t                                new_fail_timeout;
+
+    if (lua_gettop(L) != 4) {
+        return luaL_error(L, "exactly 4 arguments expected");
+    }
+
+    peer = ngx_http_lua_upstream_lookup_peer(L);
+    if (peer == NULL) {
+        return 2;
+    }
+
+    new_fail_timeout = (time_t) luaL_checkint(L, 4);
+    if (new_fail_timeout < 1){
+        lua_pushnil(L);
+        lua_pushliteral(L, "must be greater than 0");
+        return 2;
+    }
+		
+
+    peer->fail_timeout = new_fail_timeout;
+
+    return 1;
+}
+
+
+/*
  * the function is dynamically add a server to upstream 
  * server ,but not added it to the back-end peer
  * 
@@ -369,9 +443,9 @@ ngx_http_lua_upstream_add_server(lua_State * L)
     if (lua_gettop(L) != 6) {
         // six param is :"upstream name", "ip:port" , "weight" , "max_fails", 
         //"fail_time", "backup"
-        // for lua code , you must pass this five param, is none ,you should 
+        // for lua code , you must pass this six param, is none ,you should 
         // consider pass default value.
-        return luaL_error(L, "exactly seven argument expected");
+        return luaL_error(L, "exactly six argument expected");
     }
 
     r = ngx_http_lua_get_request(L);
@@ -427,8 +501,9 @@ ngx_http_lua_upstream_add_server(lua_State * L)
 
         us = ngx_array_push(uscf->servers);
         if (us == NULL) {
+            lua_pushnil(L);
             lua_pushliteral(L, "us push uscf->servers failed\n");
-            return 3;
+            return 2;
         }
        
         ngx_memzero(us, sizeof (ngx_http_upstream_server_t));
