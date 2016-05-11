@@ -484,6 +484,7 @@ ngx_http_lua_upstream_add_server(lua_State * L)
     }    
 
     if (uscf->servers == NULL || uscf->servers->nelts == 0) {
+		//add by zhendong: may be some bug, because return value should be {true, nil } or {nil, err}
         lua_pushliteral(L, "upstream has no server before!\n");
         lua_newtable(L);
         return 2;
@@ -546,6 +547,7 @@ ngx_http_lua_upstream_remove_server(lua_State * L)
         return 2;
     }
 
+	//add by zhendong: it seems to be no-op code, need to be deleted
     r = ngx_http_lua_get_request(L);
     if (r == NULL) {
         lua_pushnil(L);
